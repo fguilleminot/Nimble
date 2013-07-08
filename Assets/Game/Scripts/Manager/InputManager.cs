@@ -62,7 +62,7 @@ public class InputManager : GameManager
                 break;
             case GameEnum.INPUTSTATE.MOVE:
 
-                Leader.GetComponent<UnitManager>().newDirection = direction;
+                LeaderHeroes.GetComponent<UnitManager>().newDirection = direction;
 
                 direction = GameEnum.MOVE.NONE;
                 typeOfInput = GameEnum.EVALUATEINPUT.NONE;
@@ -75,7 +75,7 @@ public class InputManager : GameManager
 
     bool CheckDirectionMove()
     {
-        GameEnum.MOVE current = Leader.GetComponent<UnitManager>().currentDirection;
+        GameEnum.MOVE current = LeaderHeroes.GetComponent<UnitManager>().currentDirection;
 
         switch (current)
         {
@@ -175,7 +175,7 @@ public class InputManager : GameManager
 #endif
                 }
                 else
-                    newMousePosition = oldMousePosition;
+					newMousePosition = oldMousePosition;
             }
 
             LeftClickPressed = false;

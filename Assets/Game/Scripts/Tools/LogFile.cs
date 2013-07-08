@@ -21,7 +21,7 @@ public class LogFile {
 	public long GetLength()
 	{
         if (!File.Exists(nameFile))
-            return -1;
+			return -1;
         return new FileInfo(nameFile).Length;
 	}
 

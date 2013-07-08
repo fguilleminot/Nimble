@@ -11,6 +11,20 @@ public class GameEnum {
         MOVE
     };
 
+    public enum SPAWNSTATE
+    {
+        NONE,
+        SPAWN
+    }
+
+    public enum IASTATE
+    {
+        NONE,
+        EVALUATE,
+        CHECK,
+        MOVE
+    }
+
     public enum EVALUATEINPUT
     {
         NONE,
@@ -73,7 +87,7 @@ public class GameEnum {
 
     public enum CLASS
     {
-        NONE = -1,
+		NONE = -1,
         KNIGHT,
         RANGER,
         LANCER,
