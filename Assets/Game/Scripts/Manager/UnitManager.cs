@@ -19,10 +19,12 @@ public class UnitManager : MonoBehaviour
 	public GameEnum.MOVE newDirection;
 	public GameEnum.IASTATE IAState;
 
+	public bool HumanControlled = false;
 	public bool Leader;
 
-	private Vector3 positionLeaderBeforeRotate;
+	private GameDev.ChangeDirection ChangeDir = new GameDev.ChangeDirection();
 
+	public int NbChangeDirectionDone = 0;
 	private float timeBetweenAttack = -1f;
 	private float timeBeforeTakeDamage = -1f;
 
@@ -30,11 +32,26 @@ public class UnitManager : MonoBehaviour
 	void Start()
 	{
 #if UNITY_EDITOR
-		UnitLog.SetName(this.gameObject.transform.parent.name+"_" + this.gameObject.name);
+		UnitLog.SetName(this.gameObject.transform.parent.name + "_" + this.gameObject.name);
 		if (UnitLog.GetLength() > 0)
 		{
 			UnitLog.ClearFile();
 		}
+		log += "Leader : " + Leader + "\n";
+		log += "Type : " + unit.Type + "\n";
+		log += "Class : " + unit.Class + "\n";
+		log += "Attack : " + unit.Attack + "\t";
+		log += "AttackValue : " + unit.AttackValue + "\n";
+		log += "Range :" + unit.Range + "\t";
+		log += "RangeValue :" + unit.RangeValue + "\n";
+		log += "Fov :" + unit.Fov + "\t";
+		log += "FovAngleValue :" + unit.FovAngleValue + "\n";
+		log += "AttackSpeed :" + unit.AttackSpeed + "\t";
+		log += "AttackSpeedValue :" + unit.AttackSpeedValue + "\n";
+		log += "Movement :" + unit.Movement + "\t";
+		log += "MovementValue :" + unit.MovementValue + "\n";
+		log += "Cooldown :" + unit.Cooldown + "\n";
+		log += "Health :" + unit.Health + "\n";
 #endif
 		currentHealth = unit.Health;
 	}
@@ -42,40 +59,29 @@ public class UnitManager : MonoBehaviour
 	// Update is called once per frame
 	void Update()
 	{
-		if (unit.Type == GameEnum.TYPEOFUNIT.ENNEMIES)
+		Dead();
+
+		if (!HumanControlled)
 		{
 			IAManage();
 		}
-		else
-		{
 
+		if (currentDirection != newDirection)
+		{
 			if (Leader)
 			{
-				if (currentDirection != newDirection)
-				{
-					Debug.Log(this.gameObject.name);
-					Rotate();
-				}
+				ChangeDir.Position = this.transform.position;
+				ChangeDir.NewDir = newDirection;
+				if (!HumanControlled)
+					GameManager.Instance.GetEnnemiesParty(this.gameObject).ChangeDir.Add(ChangeDir);
 			}
-			else
-			{
-				if (unit.Type == GameEnum.TYPEOFUNIT.HEROES)
-				{
-					if (currentDirection != GameManager.LeaderHeroes.GetComponent<UnitManager>().currentDirection
-						&& this.transform.position == GameManager.LeaderHeroes.GetComponent<UnitManager>().positionLeaderBeforeRotate)
-					{
-						Rotate();
-					}
-				}
-				else
-				{
-					
-				}
-			}
+			Rotate();
 		}
 
 		if (currentDirection != GameEnum.MOVE.NONE && CanMove())
 			Move();
+
+		Attack();
 
 		if (timeBetweenAttack == 0f)
 			timeBetweenAttack += Time.deltaTime;
@@ -154,7 +160,8 @@ public class UnitManager : MonoBehaviour
 		}
 
 #if UNITY_EDITOR
-		log += "Rotate the leader of the pack : \n" + currentDirection + " to " + newDirection + "\n";
+		if (Leader)
+			log += "Rotate the leader of the pack : \n" + currentDirection + " to " + newDirection + "\n";
 #endif
 
 		currentDirection = newDirection;
@@ -165,13 +172,18 @@ public class UnitManager : MonoBehaviour
 		if (CanAttack())
 		{
 			GameObject target;
-
+			Debug.Log("je peux attaquer");
 			if (InRange(out target))
 			{
 #if UNITY_EDITOR
 				log += "Deal damage to : " + target;
 #endif
-				DealDamage(target);
+				Vector3 direction;
+				Debug.Log("j'ai qq'un à portée");
+				if (InFov(target, out direction))
+				{
+					DealDamage(target);
+				}
 			}
 		}
 	}
@@ -180,7 +192,7 @@ public class UnitManager : MonoBehaviour
 	{
 		Vector3 pos = this.gameObject.transform.position;
 
-		pos += this.gameObject.transform.forward * GameManager.settings.HeroSpeed * Time.deltaTime;
+		pos += this.gameObject.transform.forward * this.unit.MovementValue * Time.deltaTime;
 		this.gameObject.transform.position = pos;
 
 	}
@@ -190,44 +202,84 @@ public class UnitManager : MonoBehaviour
 		switch (IAState)
 		{
 			case GameEnum.IASTATE.EVALUATE:
-				if (Leader)
+				if (!HumanControlled && Leader)
 				{
 					EvaluateNewDirection();
 				}
-				else
+
+				if (!Leader)
 				{
-					{
-						FollowLeader();
-					}
+					FollowLeader();
 				}
 				IAState = GameEnum.IASTATE.CHECK;
 				break;
 			case GameEnum.IASTATE.CHECK:
-
 				IAState = GameEnum.IASTATE.MOVE;
 				break;
 			case GameEnum.IASTATE.MOVE:
-				if (Leader)
-				{
-					if (currentDirection != newDirection)
-						Rotate();
-				}
+				//if (currentDirection != newDirection)
+				//{
+				//	if (Leader)
+				//		positionLeaderBeforeRotate = this.transform.position;
+				//	Rotate();
+				//}
 				IAState = GameEnum.IASTATE.NONE;
 				break;
 
 			case GameEnum.IASTATE.NONE:
 				IAState = GameEnum.IASTATE.EVALUATE;
 				break;
-			default: 
+			default:
 				break;
 		}
+	}
+
+	void FollowLeader()
+	{
+		//Get My Team
+		GameDev.EnnemiesParty EP = GameManager.Instance.GetEnnemiesParty(this.gameObject);
+
+		if (EP.ChangeDir.Count <= NbChangeDirectionDone)
+			return;
+#if UNITY_EDITOR
+		//Get My Lead
+		GameObject MyLead = EP.GetLeaderOfPack();
+#endif
+
+		GameDev.ChangeDirection CD = EP.ChangeDir[NbChangeDirectionDone];
+
+#if UNITY_EDITOR
+		log += "Leader : " + MyLead.name + " ChangeDirection : " + CD.Position + " -> " + CD.NewDir;
+		log += "\n : MyPos " + this.transform.position + "\n";
+#endif
+		if (Others.CompareVectors(this.transform.position, CD.Position, 1f))
+		{
+			Debug.Log("TURN from " + newDirection + " to " + CD.NewDir);
+			this.transform.position = CD.Position;
+			newDirection = CD.NewDir;
+			NbChangeDirectionDone++;
+#if UNITY_EDITOR
+			log += "I Change Direction " + newDirection;
+#endif
+		}
+
+
+		//UnitManager UM = GameManager.Instance.GetEnnemiesParty(this.gameObject).GetLeaderOfPack().GetComponent<UnitManager>();
+		//if (this.currentDirection != UM.currentDirection)
+		//{
+		//	log += "My Lead Change his direction";
+		//	if (this.transform.position == UM.positionLeaderBeforeRotate)
+		//	{
+		//		newDirection = UM.currentDirection;
+		//	}
+		//}
 	}
 
 	bool CanMove()
 	{
 		switch (unit.Movement)
 		{
-			case GameEnum.TYPEOFMOVEMENT.NONE :
+			case GameEnum.TYPEOFMOVEMENT.NONE:
 				break;
 			case GameEnum.TYPEOFMOVEMENT.STATIC:
 				return false;
@@ -238,25 +290,6 @@ public class UnitManager : MonoBehaviour
 			default: break;
 		}
 		return false;
-	}
-
-	void FollowLeader()
-	{
-		foreach (var l in GameManager.Instance.EnnemiesParty)
-		{
-			foreach (GameObject g in l)
-			{
-				UnitManager UM = g.GetComponent<UnitManager>();
-				if (!UM.Leader)
-				{
-					if (currentDirection != UM.currentDirection
-						&& this.transform.position == UM.positionLeaderBeforeRotate)
-					{
-						Rotate();
-					}
-				}
-			}
-		}
 	}
 
 	//Change Direction when approach wall
@@ -274,20 +307,23 @@ public class UnitManager : MonoBehaviour
 				switch (currentDirection)
 				{
 					case GameEnum.MOVE.NONE:
-						randDirection(5);
+						newDirection = randDirection(5);
 						break;
 					case GameEnum.MOVE.UP:
 					case GameEnum.MOVE.DOWN:
 					case GameEnum.MOVE.LEFT:
 					case GameEnum.MOVE.RIGHT:
-						randDirection(4);
+						do
+						{
+						newDirection = randDirection(4);
+						}while(!CheckNewDirection());
 						break;
 					default: break;
 				}
 			}
 			else
 			{
-				if (GameDev.RandomGenerator.Next(100) >= 75)
+				if (GameDev.RandomGenerator.Next(100) >= 99)
 				{
 #if UNITY_EDITOR
 					log += "Change Direction cause i want";
@@ -295,41 +331,22 @@ public class UnitManager : MonoBehaviour
 					switch (currentDirection)
 					{
 						case GameEnum.MOVE.NONE:
-							randDirection(5);
+							newDirection = randDirection(5);
 							break;
 						case GameEnum.MOVE.UP:
 						case GameEnum.MOVE.DOWN:
 						case GameEnum.MOVE.LEFT:
 						case GameEnum.MOVE.RIGHT:
-							randDirection(4);
+							newDirection = randDirection(4);
 							break;
 						default: break;
 					}
 				}
 			}
 		}
-		else
-		{
-			if (this.transform.position == positionLeaderBeforeRotate)
-			{
-				foreach (var l in GameManager.Instance.EnnemiesParty)
-				{
-					if (l.Contains(this.gameObject))
-					{
-						foreach (GameObject u in l)
-						{
-							if (u.GetComponent<UnitManager>().Leader)
-							{
-								newDirection = u.GetComponent<UnitManager>().currentDirection;
-							}
-						}
-					}
-				}
-			}
-		}
 	}
 
-	void randDirection(int maxRand)
+	GameEnum.MOVE randDirection(int maxRand)
 	{
 		if (maxRand > 5)
 			maxRand = 5;
@@ -338,21 +355,16 @@ public class UnitManager : MonoBehaviour
 		do
 		{
 			newDir = GameDev.RandomGenerator.Next(1, maxRand);
-		} while (newDir == (int)currentDirection);
+		} while (newDir == (int)currentDirection && !CheckDirectionMove());
 
 		//Debug.Log("new direction for " + this.gameObject.name + " "+(int) currentDirection + " to " + newDir);
 		switch (newDir)
 		{
-			case 1: newDirection = GameEnum.MOVE.UP;
-				break;
-			case 2: newDirection = GameEnum.MOVE.DOWN;
-				break;
-			case 3: newDirection = GameEnum.MOVE.LEFT;
-				break;
-			case 4: newDirection = GameEnum.MOVE.RIGHT;
-				break;
-			default: newDirection = GameEnum.MOVE.NONE;
-				break;
+			case 1: return GameEnum.MOVE.UP;
+			case 2: return GameEnum.MOVE.DOWN;
+			case 3: return GameEnum.MOVE.LEFT;
+			case 4: return GameEnum.MOVE.RIGHT;
+			default: return GameEnum.MOVE.NONE;
 		}
 	}
 
@@ -364,11 +376,11 @@ public class UnitManager : MonoBehaviour
 			timeBeforeTakeDamage = -1f;
 		}
 #if UNITY_EDITOR
-		log += "Variation of life, new life : " + this.currentHealth;
+		log += "Variation of life, new life : " + this.currentHealth+"\n";
 #endif
 	}
 
-	void DealDamage( GameObject target = null )
+	void DealDamage(GameObject target = null)
 	{
 		switch (unit.Attack)
 		{
@@ -377,17 +389,17 @@ public class UnitManager : MonoBehaviour
 			case GameEnum.TYPEOFATTACK.VALUE:
 				if (target)
 					target.GetComponent<UnitManager>().TakeDamage(unit.AttackValue, DelayDamage());
-					//target.GetComponent<UnitManager>().currentHealth -= unit.AttackValue;
+				//target.GetComponent<UnitManager>().currentHealth -= unit.AttackValue;
 				else
-					log += "try to attack a target null";
+					log += "try to attack a target null\n";
 				break;
 			case GameEnum.TYPEOFATTACK.INSTANTKILL:
 				if (target)
 					target.GetComponent<UnitManager>().TakeDamage(target.GetComponent<UnitManager>().currentHealth, DelayDamage());
 				else
-					log += "try to instakill a target null";
+					log += "try to instakill a target null\n";
 				break;
-				//Healer Case
+			//Healer Case
 			case GameEnum.TYPEOFATTACK.ALLTHELIFE:
 				foreach (var l in GameManager.Instance.EnnemiesParty)
 				{
@@ -396,7 +408,7 @@ public class UnitManager : MonoBehaviour
 						foreach (GameObject g in l)
 						{
 							UnitManager UM = g.GetComponent<UnitManager>();
-							UM.TakeDamage(- (UM.unit.Health - UM.currentHealth));
+							UM.TakeDamage(-(UM.unit.Health - UM.currentHealth));
 						}
 					}
 				}
@@ -407,6 +419,8 @@ public class UnitManager : MonoBehaviour
 
 	bool CanAttack()
 	{
+		if (timeBetweenAttack == -1f)
+			return true;
 		if (timeBetweenAttack >= unit.Cooldown)
 		{
 			timeBetweenAttack = -1f;
@@ -447,15 +461,33 @@ public class UnitManager : MonoBehaviour
 			case GameEnum.TYPEOFRANGE.NONE:
 				break;
 			case GameEnum.TYPEOFRANGE.VALUE:
-				foreach (var g in GameManager.Instance.Heroes)
+				if (this.unit.Type == GameEnum.TYPEOFUNIT.ENNEMIES)
 				{
-					if (Vector3.SqrMagnitude(g.transform.position - this.gameObject.transform.position) <=
-						(unit.RangeValue * GameManager.settings.multiplierRange) * (unit.RangeValue * GameManager.settings.multiplierRange))
+					foreach (var g in GameManager.Instance.Heroes)
 					{
-						target = g;
-						return true;
+						if (Vector3.SqrMagnitude(g.transform.position - this.gameObject.transform.position) <=
+							(unit.RangeValue * GameManager.settings.multiplierRange) * (unit.RangeValue * GameManager.settings.multiplierRange))
+						{
+							target = g;
+							return true;
+						}
 					}
 				}
+				else
+				{
+					foreach (var EP in GameManager.Instance.EnnemiesParty)
+					{
+						foreach (GameObject g in EP)
+						{
+							if (Vector3.SqrMagnitude(g.transform.position - this.gameObject.transform.position) <=
+								(unit.RangeValue * GameManager.settings.multiplierRange) * (unit.RangeValue * GameManager.settings.multiplierRange))
+							{
+								target = g;
+								return true;
+							}
+						}
+					}
+				}				
 				break;
 			case GameEnum.TYPEOFRANGE.ALLGROUP:
 				return true;
@@ -467,6 +499,11 @@ public class UnitManager : MonoBehaviour
 	bool InFov(GameObject target, out Vector3 direction)
 	{
 		direction = Vector3.zero;
+
+		if (target == null)
+		{
+			return true;
+		}
 		Vector3 dir = target.transform.position - this.transform.position;
 
 		switch (unit.Fov)
@@ -474,7 +511,7 @@ public class UnitManager : MonoBehaviour
 			case GameEnum.TYPEOFFOV.NONE:
 				return false;
 			case GameEnum.TYPEOFFOV.INAROW:
-				
+
 				float dotP = Vector3.Dot(dir, Vector3.up);
 				if (Others.nearlyEqual(dotP, 1f, 0.1f))
 				{
@@ -504,12 +541,72 @@ public class UnitManager : MonoBehaviour
 				}
 				break;
 			case GameEnum.TYPEOFFOV.ANGLE:
-				return ( Vector3.Angle(target.transform.position - this.transform.position, this.transform.forward) <= unit.FovAngleValue/2 );
+				return (Vector3.Angle(target.transform.position - this.transform.position, this.transform.forward) <= unit.FovAngleValue / 2);
 			case GameEnum.TYPEOFFOV.ALLGROUP:
 				return true;
 			default: break;
 		}
 
+		return false;
+	}
+
+	public bool CheckNewDirection()
+	{
+		switch (newDirection)
+		{
+			case GameEnum.MOVE.UP:
+				return !(Physics.Raycast(this.transform.position, Vector3.forward, 1f, GameManager.settings.WallLayer));
+			case GameEnum.MOVE.DOWN:
+				return !(Physics.Raycast(this.transform.position, Vector3.back, 1f, GameManager.settings.WallLayer));
+			case GameEnum.MOVE.RIGHT:
+				return !(Physics.Raycast(this.transform.position, Vector3.right, 1f, GameManager.settings.WallLayer));
+			case GameEnum.MOVE.LEFT:
+				return !(Physics.Raycast(this.transform.position, Vector3.left, 1f, GameManager.settings.WallLayer));
+			case GameEnum.MOVE.NONE:
+				return true;
+			default:
+				break;
+		}
+		return false;
+	}
+
+	public bool CheckDirectionMove()
+	{
+		switch (currentDirection)
+		{
+			case GameEnum.MOVE.UP:
+				return !(newDirection == GameEnum.MOVE.DOWN);
+			case GameEnum.MOVE.DOWN:
+				return !(newDirection == GameEnum.MOVE.UP);
+			case GameEnum.MOVE.RIGHT:
+				return !(newDirection == GameEnum.MOVE.LEFT);
+			case GameEnum.MOVE.LEFT:
+				return !(newDirection == GameEnum.MOVE.RIGHT);
+			case GameEnum.MOVE.NONE:
+				return true;
+			default:
+				break;
+		}
+		return false;
+	}
+
+	public bool CheckDirectionMove(int dir)
+	{
+		switch (currentDirection)
+		{
+			case GameEnum.MOVE.UP:
+				return !(dir == (int)GameEnum.MOVE.DOWN);
+			case GameEnum.MOVE.DOWN:
+				return !(dir == (int)GameEnum.MOVE.UP);
+			case GameEnum.MOVE.RIGHT:
+				return !(dir == (int)GameEnum.MOVE.LEFT);
+			case GameEnum.MOVE.LEFT:
+				return !(dir == (int)GameEnum.MOVE.RIGHT);
+			case GameEnum.MOVE.NONE:
+				return true;
+			default:
+				break;
+		}
 		return false;
 	}
 

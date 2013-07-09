@@ -101,4 +101,11 @@ public class GameEnum {
 		DARKMAGE,
 		HEALER
 	};
+
+    public enum GAMESTATE
+    {
+        INGAME,
+        WIN,
+        LOOSE
+    };
 }

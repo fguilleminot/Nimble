@@ -1,7 +1,7 @@
 using UnityEngine;
 using System.Collections;
 
-public class InputManager : GameManager
+public class InputManager : MonoBehaviour
 {
 
 	GameEnum.INPUTSTATE state = GameEnum.INPUTSTATE.NONE;
@@ -57,12 +57,12 @@ public class InputManager : GameManager
 					state = GameEnum.INPUTSTATE.CHECK;
 				break;
 			case GameEnum.INPUTSTATE.CHECK:
-				if (CheckDirectionMove())
+				if (GameManager.LeaderHeroes.GetComponent<UnitManager>().CheckDirectionMove())
 					state = GameEnum.INPUTSTATE.MOVE;
 				break;
 			case GameEnum.INPUTSTATE.MOVE:
 
-				LeaderHeroes.GetComponent<UnitManager>().newDirection = direction;
+                GameManager.LeaderHeroes.GetComponent<UnitManager>().newDirection = direction;
 
 				direction = GameEnum.MOVE.NONE;
 				typeOfInput = GameEnum.EVALUATEINPUT.NONE;
@@ -71,28 +71,6 @@ public class InputManager : GameManager
 			default: break;
 		}
 
-	}
-
-	bool CheckDirectionMove()
-	{
-		GameEnum.MOVE current = LeaderHeroes.GetComponent<UnitManager>().currentDirection;
-
-		switch (current)
-		{
-			case GameEnum.MOVE.UP:
-				return !(direction == GameEnum.MOVE.DOWN);
-			case GameEnum.MOVE.DOWN:
-				return !(direction == GameEnum.MOVE.UP);
-			case GameEnum.MOVE.RIGHT:
-				return !(direction == GameEnum.MOVE.LEFT);
-			case GameEnum.MOVE.LEFT:
-				return !(direction == GameEnum.MOVE.RIGHT);
-			case GameEnum.MOVE.NONE:
-				return true;
-			default:
-				break;
-		}
-		return false;
 	}
 
 	void KeyBoardDetectionMove()
