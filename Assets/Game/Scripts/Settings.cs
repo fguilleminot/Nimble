@@ -18,7 +18,9 @@ public class Settings : MonoBehaviour{
 	public int rotationAngle;
 	public int HeroSpeed = 5;
 	public int EnnemiesNumberToWin = 10;
+	public int EnnemiesMaxTeamOnMap = 5;
 	public float TimeBetweenSpawn;
+	public float TimeBetweenChangementDirection = 1;
 
 	public int EnnemiesTeamNumberMax = 3;
 

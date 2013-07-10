@@ -94,7 +94,7 @@ public class GameManager : MonoBehaviour
 		{
 			case GameEnum.SPAWNSTATE.NONE:
 
-				if (TimeSinceSpawn >= settings.TimeBetweenSpawn && nbEnnemiesGroupSpawned <= 5)
+				if (TimeSinceSpawn >= settings.TimeBetweenSpawn && nbEnnemiesGroupSpawned <= settings.EnnemiesMaxTeamOnMap)
 				{
 					SpawnState = GameEnum.SPAWNSTATE.SPAWN;
 				}

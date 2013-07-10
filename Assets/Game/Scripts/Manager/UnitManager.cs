@@ -22,11 +22,14 @@ public class UnitManager : MonoBehaviour
 	public bool HumanControlled = false;
 	public bool Leader;
 
-	private GameDev.ChangeDirection ChangeDir = new GameDev.ChangeDirection();
+	private GameDev.ChangeDirection ChangeDirection = new GameDev.ChangeDirection();
 
 	public int NbChangeDirectionDone = 0;
 	private float timeBetweenAttack = -1f;
 	private float timeBeforeTakeDamage = -1f;
+	private float timeBetweenChangeDirection = -1f;
+
+	public GameDev.ChangeDirection NextChangeDirection = null;
 
 	// Use this for initialization
 	void Start()
@@ -68,12 +71,17 @@ public class UnitManager : MonoBehaviour
 
 		if (currentDirection != newDirection)
 		{
+			timeBetweenChangeDirection = 0f;
 			if (Leader)
 			{
-				ChangeDir.Position = this.transform.position;
-				ChangeDir.NewDir = newDirection;
+				ChangeDirection.Position = this.transform.position;
+				ChangeDirection.NewDir = newDirection;
 				if (!HumanControlled)
-					GameManager.Instance.GetEnnemiesParty(this.gameObject).ChangeDir.Add(ChangeDir);
+					GameManager.Instance.GetEnnemiesParty(this.gameObject).ChangeDir.Add(ChangeDirection);
+				else
+				{
+					//TODO
+				}
 			}
 			Rotate();
 		}
@@ -81,14 +89,20 @@ public class UnitManager : MonoBehaviour
 		if (currentDirection != GameEnum.MOVE.NONE && CanMove())
 			Move();
 
+		CorrectionPosition();
 		Attack();
 
-		if (timeBetweenAttack == 0f)
-			timeBetweenAttack += Time.deltaTime;
+		if (timeBetweenAttack >= 0f)
+		{
+			if (timeBetweenAttack < GameManager.settings.TimeBetweenChangementDirection)
+				timeBetweenAttack += Time.deltaTime;
+		}
 
-		if (timeBeforeTakeDamage == 0f)
+		if (timeBeforeTakeDamage >= 0f)
 			timeBeforeTakeDamage += Time.deltaTime;
 
+		if (timeBetweenChangeDirection >= 0f)
+			timeBetweenChangeDirection += Time.deltaTime;
 #if UNITY_EDITOR
 		UpdateLog();
 #endif
@@ -172,14 +186,14 @@ public class UnitManager : MonoBehaviour
 		if (CanAttack())
 		{
 			GameObject target;
-			Debug.Log("je peux attaquer");
+			//Debug.Log("je peux attaquer");
 			if (InRange(out target))
 			{
 #if UNITY_EDITOR
 				log += "Deal damage to : " + target;
 #endif
 				Vector3 direction;
-				Debug.Log("j'ai qq'un à portée");
+				//Debug.Log("j'ai qq'un à portée");
 				if (InFov(target, out direction))
 				{
 					DealDamage(target);
@@ -202,6 +216,7 @@ public class UnitManager : MonoBehaviour
 		switch (IAState)
 		{
 			case GameEnum.IASTATE.EVALUATE:
+				LeadHaveTurn();
 				if (!HumanControlled && Leader)
 				{
 					EvaluateNewDirection();
@@ -209,7 +224,8 @@ public class UnitManager : MonoBehaviour
 
 				if (!Leader)
 				{
-					FollowLeader();
+					TurnToFollow();
+					//FollowLeader();
 				}
 				IAState = GameEnum.IASTATE.CHECK;
 				break;
@@ -234,36 +250,75 @@ public class UnitManager : MonoBehaviour
 		}
 	}
 
-	void FollowLeader()
+	void LeadHaveTurn()
 	{
-		//Get My Team
+		if (Leader || NextChangeDirection != null)
+			return;
+
 		GameDev.EnnemiesParty EP = GameManager.Instance.GetEnnemiesParty(this.gameObject);
 
-		if (EP.ChangeDir.Count <= NbChangeDirectionDone)
-			return;
-#if UNITY_EDITOR
-		//Get My Lead
-		GameObject MyLead = EP.GetLeaderOfPack();
-#endif
-
-		GameDev.ChangeDirection CD = EP.ChangeDir[NbChangeDirectionDone];
-
-#if UNITY_EDITOR
-		log += "Leader : " + MyLead.name + " ChangeDirection : " + CD.Position + " -> " + CD.NewDir;
-		log += "\n : MyPos " + this.transform.position + "\n";
-#endif
-		if (Others.CompareVectors(this.transform.position, CD.Position, 1f))
+		if (this.unit.Type == GameEnum.TYPEOFUNIT.ENNEMIES)
 		{
-			Debug.Log("TURN from " + newDirection + " to " + CD.NewDir);
-			this.transform.position = CD.Position;
-			newDirection = CD.NewDir;
-			NbChangeDirectionDone++;
-#if UNITY_EDITOR
-			log += "I Change Direction " + newDirection;
-#endif
+			if (EP.ChangeDir.Count == 0)
+				return;
+			else if (EP.GetChangeDirectionElement(NbChangeDirectionDone) != NextChangeDirection)
+			{
+				NextChangeDirection = EP.GetChangeDirectionElement(NbChangeDirectionDone);
+			}
 		}
+	}
 
+	void TurnToFollow()
+	{
+		if (NextChangeDirection != null)
+		{
+			if (Others.CompareVectors(this.transform.position, NextChangeDirection.Position, 0.1f))
+			{
+				//NEED TO TURN
+				newDirection = NextChangeDirection.NewDir;
+				this.transform.position = NextChangeDirection.Position;
 
+				NbChangeDirectionDone++;
+				NextChangeDirection = null;
+			}
+		}
+	}
+
+	void FollowLeader()
+	{
+		if (this.unit.Type == GameEnum.TYPEOFUNIT.ENNEMIES)
+		{
+			//Get My Team
+			GameDev.EnnemiesParty EP = GameManager.Instance.GetEnnemiesParty(this.gameObject);
+
+			if (EP.ChangeDir.Count <= NbChangeDirectionDone)
+			{
+				return;
+			}
+#if UNITY_EDITOR
+			//Get My Lead
+			GameObject MyLead = EP.GetLeaderOfPack();
+#endif
+
+			GameDev.ChangeDirection CD = EP.ChangeDir[NbChangeDirectionDone];
+
+#if UNITY_EDITOR
+			log += "Leader : " + MyLead.name + " ChangeDirection : " + CD.Position + " -> " + CD.NewDir + "\n";
+			log += "MyPos " + this.transform.position + "\n";
+			log += "NbChangeDirectionDone : " + NbChangeDirectionDone + "\n";
+#endif
+			if (Others.CompareVectors(this.transform.position, CD.Position, 1f))
+			{
+				Debug.Log("TURN from " + newDirection + " to " + CD.NewDir);
+				this.transform.position = CD.Position;
+				newDirection = CD.NewDir;
+				NbChangeDirectionDone++;
+#if UNITY_EDITOR
+				log += "I Change Direction " + newDirection;
+#endif
+			}
+
+		}
 		//UnitManager UM = GameManager.Instance.GetEnnemiesParty(this.gameObject).GetLeaderOfPack().GetComponent<UnitManager>();
 		//if (this.currentDirection != UM.currentDirection)
 		//{
@@ -315,31 +370,36 @@ public class UnitManager : MonoBehaviour
 					case GameEnum.MOVE.RIGHT:
 						do
 						{
-						newDirection = randDirection(4);
-						}while(!CheckNewDirection());
+							newDirection = randDirection(4);
+						} while (!CheckNewDirection());
 						break;
 					default: break;
 				}
 			}
 			else
 			{
-				if (GameDev.RandomGenerator.Next(100) >= 99)
+				if (timeBetweenChangeDirection >= GameManager.settings.TimeBetweenChangementDirection)
 				{
-#if UNITY_EDITOR
-					log += "Change Direction cause i want";
-#endif
-					switch (currentDirection)
+					//Debug.Log(this.gameObject.name);
+					if (GameDev.RandomGenerator.Next(100) >= 75)
 					{
-						case GameEnum.MOVE.NONE:
-							newDirection = randDirection(5);
-							break;
-						case GameEnum.MOVE.UP:
-						case GameEnum.MOVE.DOWN:
-						case GameEnum.MOVE.LEFT:
-						case GameEnum.MOVE.RIGHT:
-							newDirection = randDirection(4);
-							break;
-						default: break;
+#if UNITY_EDITOR
+						log += "Change Direction cause i want";
+#endif
+						switch (currentDirection)
+						{
+							case GameEnum.MOVE.NONE:
+								newDirection = randDirection(5);
+								break;
+							case GameEnum.MOVE.UP:
+							case GameEnum.MOVE.DOWN:
+							case GameEnum.MOVE.LEFT:
+							case GameEnum.MOVE.RIGHT:
+								newDirection = randDirection(4);
+								break;
+							default: break;
+						}
+						timeBetweenChangeDirection = -1f;
 					}
 				}
 			}
@@ -376,7 +436,7 @@ public class UnitManager : MonoBehaviour
 			timeBeforeTakeDamage = -1f;
 		}
 #if UNITY_EDITOR
-		log += "Variation of life, new life : " + this.currentHealth+"\n";
+		log += "Variation of life, new life : " + this.currentHealth + "\n";
 #endif
 	}
 
@@ -487,7 +547,7 @@ public class UnitManager : MonoBehaviour
 							}
 						}
 					}
-				}				
+				}
 				break;
 			case GameEnum.TYPEOFRANGE.ALLGROUP:
 				return true;
@@ -568,6 +628,64 @@ public class UnitManager : MonoBehaviour
 				break;
 		}
 		return false;
+	}
+
+	public void CorrectionPosition()
+	{
+		if (Leader)
+			return;
+
+		int idx;
+		Vector3 posPrevious = Vector3.zero;
+		GameDev.EnnemiesParty EP;
+
+		idx = GetIndex(out EP);
+		if (idx == -1)
+		{
+#if UNITY_EDITOR
+			log += "ERROR GetIndex";
+#endif
+			return;
+		}
+
+		if (HumanControlled)
+		{
+			posPrevious = GameManager.Instance.Heroes[idx - 1].transform.position;
+		}
+		else
+		{
+			if (EP != null)
+				posPrevious = EP.GetEnnemies()[idx - 1].transform.position;
+		}
+
+		//Debug.Log("Dist " + (posPrevious - this.transform.position).sqrMagnitude);
+	}
+
+	public int GetIndex(out GameDev.EnnemiesParty EP)
+	{
+		EP = null;
+		if (HumanControlled)
+		{
+			return index(GameManager.Instance.Heroes);
+		}
+		else
+		{
+			EP = GameManager.Instance.GetEnnemiesParty(this.gameObject);
+			return index(EP.GetEnnemies());
+		}
+	}
+
+	private int index(List<GameObject> l)
+	{
+		int idx = 0;
+		foreach (GameObject g in l)
+		{
+			if (g == this.gameObject)
+				return idx;
+			else
+				idx++;
+		}
+		return -1;
 	}
 
 	public bool CheckDirectionMove()
